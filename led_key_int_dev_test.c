@@ -37,11 +37,11 @@ int main(int argc, char **argv)
     else if(strcmp(argv[1],"key") == 0)
     {
         unsigned char keyval;       
-        printf("waiting for key1 input...\r\n");
+        printf("waiting for key2 input...\r\n");
         while(1){
             read(fd, &keyval, sizeof(keyval));
             if(keyval != 1){
-                printf("key1 pressed.\r\n");
+                printf("key2 pressed.\r\n");
                 break;
             }
         }
