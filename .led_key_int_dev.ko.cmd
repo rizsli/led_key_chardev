@@ -1,0 +1,1 @@
+cmd_/home/book/Desktop/imx_wksps/dev-wksps/leddev_int/led_key_int_dev.ko := arm-linux-gnueabihf-ld -EL -r  -T ./scripts/module-common.lds --build-id  -o /home/book/Desktop/imx_wksps/dev-wksps/leddev_int/led_key_int_dev.ko /home/book/Desktop/imx_wksps/dev-wksps/leddev_int/led_key_int_dev.o /home/book/Desktop/imx_wksps/dev-wksps/leddev_int/led_key_int_dev.mod.o ;  true
