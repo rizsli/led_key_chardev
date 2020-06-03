@@ -54,10 +54,13 @@ struct char_dev{
  	int gpio_key;
 	struct key_irq_desc keyirqdesc;
 	struct tasklet_struct key_tasklet;	
-} led_dev;
+};
+
+//define variables
+static struct char_dev *led_dev;
 static char dev_buf[100];
 
-//taskled
+//tasklet
 void delay_short(volatile unsigned int n)
 {
 	while(n--){}
@@ -76,8 +79,8 @@ void key_tasklet_opr(unsigned long data){
 	struct char_dev *devc = (struct char_dev *)data;
 	keydesc = &devc->keyirqdesc;
 	delay(10);
-	printk("key1 press confirmed.\r\n");
 	if(gpio_get_value(devc->keyirqdesc.gpio) == 0){
+		printk("key1 press confirmed.\r\n");		
 		if(gpio_get_value(devc->gpio_led) == 0){
 			gpio_set_value(devc->gpio_led, 1);
 		}
@@ -95,14 +98,120 @@ static irqreturn_t key1_irq_handler(int irq, void *dev_id){
 	devc->key_tasklet.data = (unsigned long)dev_id;
 	tasklet_schedule(&devc->key_tasklet);	
 	return IRQ_RETVAL(IRQ_HANDLED);
+	
+}
+
+//hardware init
+static int hw_init(struct char_dev *led_dev){
+	int err = 0;	
+//led init	
+	printk("ready to init led dev.\r\n");
+
+	led_dev->nd_led = of_find_node_by_path("/tstled");
+	if(led_dev->nd_led == NULL){
+		printk("node led not found.\r\n");
+		return -1;
+	}
+	else{
+		printk("node led has been found.\r\n");
+	}
+
+	led_dev->gpio_led = of_get_named_gpio(led_dev->nd_led, "gpios", 0);
+	if(led_dev->gpio_led < 0){
+		printk("get gpio_led failed.");
+		return -1;
+	}
+	err = gpio_direction_output(led_dev->gpio_led, 1);
+	if(err < 0) printk("set led gpio direction failed");
+
+//key1 init
+/*to do list:
+1.find node in devicetree;
+2.get gpio from node;
+3.set up gpio-sub-system;
+4.prepare irq num, init tasklet and irq_handler function;
+5.register interrupt with irqnum, irq handler and tasklet.
+*/
+	printk("ready to init key dev.\r\n");
+
+	led_dev->nd_key = of_find_node_by_path("/key1");
+	if(led_dev->nd_key == NULL){
+		printk("node key not found.\r\n");
+		return -1;
+	}
+	else{
+		printk("node key has been found.\r\n");
+	}
+
+	led_dev->keyirqdesc.gpio = of_get_named_gpio(led_dev->nd_key, "key-gpio", 0);
+	if(led_dev->keyirqdesc.gpio < 0){
+		printk("get key gpio failed.");
+		return -1;
+	}
+
+	err = gpio_request(led_dev->keyirqdesc.gpio, "key1");
+	err = gpio_direction_input(led_dev->keyirqdesc.gpio);
+	if(err < 0) {
+		printk("set key gpio direction failed");
+		return -1;
+	}
+	
+	led_dev->keyirqdesc.handler = key1_irq_handler;
+	
+//	led_dev->keyirqdesc.irqnum = irq_of_parse_and_map(led_dev->nd_key, 0);
+	led_dev->keyirqdesc.irqnum = gpio_to_irq(led_dev->keyirqdesc.gpio);
+	
+	printk("key irqnum is:%d \r\n",led_dev->keyirqdesc.irqnum);
+	if(led_dev->keyirqdesc.irqnum == 0){
+		printk("failed to get an irq num.");
+		return -1;
+	}
+	
+
+	tasklet_init(&led_dev->key_tasklet, key_tasklet_opr, led_dev->key_tasklet.data);
+
+	err = request_irq(led_dev->keyirqdesc.irqnum, led_dev->keyirqdesc.handler, IRQF_TRIGGER_FALLING, "key1", led_dev);
+	if(err < 0) {
+		printk("key1 irq request failed");
+		return -1;
+	}
+
+//key2 init
+	printk("ready to init key2 dev.\r\n");
+
+	led_dev->nd_key = of_find_node_by_path("/key2");
+	if(led_dev->nd_key == NULL){
+		printk("node key2 not found.\r\n");
+		return -1;
+	}
+	else{
+		printk("node key2 has been found.\r\n");
+	}
+
+	led_dev->gpio_key = of_get_named_gpio(led_dev->nd_key, "key-gpio", 0);
+	if(led_dev->gpio_key < 0){
+		printk("get key2 gpio failed.");
+		return -1;
+	}
+
+	err = gpio_request(led_dev->gpio_key, "key2");
+	err = gpio_direction_input(led_dev->gpio_key);
+	if(err < 0) {
+	printk("key2 direction set failed");
+	return -1;
+	}
+	
+	return 0;
+	
 }
 
 //read write open release func
 static int led_open(struct inode *inode, struct file *file)
 {
-	file->private_data = &led_dev;
+	file->private_data = led_dev;
 	printk("chardev led opened.\r\n");
 	return 0;
+	
 }
 
 
@@ -149,6 +258,7 @@ static ssize_t led_write(struct file *file, const char __user *buf, size_t size,
 	printk("led operated, gpio_led=%d \r\n",gpio_get_value(devc->gpio_led));
 
 	return 0;
+	
 }
 
 static int led_release(struct inode *inode, struct file *file)
@@ -171,112 +281,39 @@ static struct file_operations led_dev_fops = {
 static int __init led_init(void)
 {
 	int err;
+	led_dev = kzalloc(sizeof(struct char_dev), GFP_KERNEL);
 
-//led init	
-	printk("ready to init led dev.\r\n");
-
-	led_dev.nd_led = of_find_node_by_path("/tstled");
-	if(led_dev.nd_led == NULL){
-		printk("node led not found.\r\n");
-		return -1;
-	}
-	else{
-		printk("node led has been found.\r\n");
-	}
-
-	led_dev.gpio_led = of_get_named_gpio(led_dev.nd_led, "gpios", 0);
-	if(led_dev.gpio_led < 0){
-		printk("get gpio_led failed.");
-		return -1;
-	}
-	err = gpio_direction_output(led_dev.gpio_led, 1);
-	if(err < 0) printk("set led gpio direction failed");
-
-//key1 init
-	printk("ready to init key dev.\r\n");
-
-	led_dev.nd_key = of_find_node_by_path("/key1");
-	if(led_dev.nd_key == NULL){
-		printk("node key not found.\r\n");
-		return -1;
-	}
-	else{
-		printk("node key has been found.\r\n");
-	}
-
-	led_dev.keyirqdesc.gpio = of_get_named_gpio(led_dev.nd_key, "key-gpio", 0);
-	if(led_dev.keyirqdesc.gpio < 0){
-		printk("get key gpio failed.");
-		return -1;
-	}
-
-	err = gpio_request(led_dev.keyirqdesc.gpio, "key1");
-	err = gpio_direction_input(led_dev.keyirqdesc.gpio);
- 	if(err < 0) printk("set key gpio direction failed");
-	
-	led_dev.keyirqdesc.handler = key1_irq_handler;
-	
-//	led_dev.keyirqdesc.irqnum = irq_of_parse_and_map(led_dev.nd_key, 0);
-	led_dev.keyirqdesc.irqnum = gpio_to_irq(led_dev.keyirqdesc.gpio);
-	
-	printk("key irqnum is:%d \r\n",led_dev.keyirqdesc.irqnum);
-	if(led_dev.keyirqdesc.irqnum == 0) printk("failed to get an irq num.");
-	
-
-	tasklet_init(&led_dev.key_tasklet, key_tasklet_opr, led_dev.key_tasklet.data);
-
-	err = request_irq(led_dev.keyirqdesc.irqnum, led_dev.keyirqdesc.handler, IRQF_TRIGGER_FALLING, "key1", &led_dev);
-	if(err < 0) printk("key1 irq request failed");
-
-//key2 init
-	printk("ready to init key2 dev.\r\n");
-
-	led_dev.nd_key = of_find_node_by_path("/key2");
-	if(led_dev.nd_key == NULL){
-		printk("node key2 not found.\r\n");
-		return -1;
-	}
-	else{
-		printk("node key2 has been found.\r\n");
-	}
-
-	led_dev.gpio_key = of_get_named_gpio(led_dev.nd_key, "key-gpio", 0);
-	if(led_dev.gpio_key < 0){
-		printk("get key2 gpio failed.");
-		return -1;
-	}
-
-	err = gpio_request(led_dev.gpio_key, "key2");
-	err = gpio_direction_input(led_dev.gpio_key);
-
+//hardware init	
+	err = hw_init(led_dev);
+	if(err < 0)printk("hardware init failed");
 
 //register chardev
 	//applicate a dev num
-	if(led_dev.major){
-		led_dev.devid = MKDEV(led_dev.major, 0);
-		register_chrdev_region(led_dev.devid, 1, "led_dev");
+	if(led_dev->major){
+		led_dev->devid = MKDEV(led_dev->major, 0);
+		register_chrdev_region(led_dev->devid, 1, "led_dev");
 	}
 	else{
-		alloc_chrdev_region(&led_dev.devid, 0, 1, "led_dev");
-		led_dev.major = MAJOR(led_dev.devid);
-		led_dev.minor = MINOR(led_dev.devid);
+		alloc_chrdev_region(&led_dev->devid, 0, 1, "led_dev");
+		led_dev->major = MAJOR(led_dev->devid);
+		led_dev->minor = MINOR(led_dev->devid);
 	}
-	printk("led_dev major=%d minor=%d",led_dev.major,led_dev.minor);
+	printk("led_dev major=%d minor=%d",led_dev->major,led_dev->minor);
 
 	//initialize cdev
-	led_dev.cdev.owner = THIS_MODULE;
-	cdev_init(&led_dev.cdev, &led_dev_fops);
+	led_dev->cdev.owner = THIS_MODULE;
+	cdev_init(&led_dev->cdev, &led_dev_fops);
 	
 	//add cdev
-	cdev_add(&led_dev.cdev, led_dev.devid, 1);
+	cdev_add(&led_dev->cdev, led_dev->devid, 1);
 
 	//create class
-	led_dev.class = class_create(THIS_MODULE, "led_dev");
-	if(IS_ERR(led_dev.class)) return PTR_ERR(led_dev.class);
+	led_dev->class = class_create(THIS_MODULE, "led_dev");
+	if(IS_ERR(led_dev->class)) return PTR_ERR(led_dev->class);
 
 	//create device
-	led_dev.device = device_create(led_dev.class, NULL, led_dev.devid, NULL, "led_dev");
-	if(IS_ERR(led_dev.device)) return PTR_ERR(led_dev.device);
+	led_dev->device = device_create(led_dev->class, NULL, led_dev->devid, NULL, "led_dev");
+	if(IS_ERR(led_dev->device)) return PTR_ERR(led_dev->device);
 	
 	return 0;
 }
@@ -284,15 +321,17 @@ static int __init led_init(void)
 static void __exit led_exit(void)
 {
 	//release interrupt
-	free_irq(led_dev.keyirqdesc.irqnum, &led_dev);
+	free_irq(led_dev->keyirqdesc.irqnum, led_dev);
 	
 	//unregister dev
-	cdev_del(&led_dev.cdev);
-	unregister_chrdev_region(led_dev.devid, 1);
+	cdev_del(&led_dev->cdev);
+	unregister_chrdev_region(led_dev->devid, 1);
 
-	device_destroy(led_dev.class, led_dev.devid);
-	class_destroy(led_dev.class);
-
+	device_destroy(led_dev->class, led_dev->devid);
+	class_destroy(led_dev->class);
+	
+	kfree(led_dev);
+	
 	printk("led dev unregisted.\r\n");
 }
 

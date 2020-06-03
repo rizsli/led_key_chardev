@@ -22,6 +22,7 @@ static const struct modversion_info ____versions[]
 __used
 __attribute__((section("__versions"))) = {
 	{ 0x3cb79823, __VMLINUX_SYMBOL_STR(module_layout) },
+	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
 	{ 0x77d800a2, __VMLINUX_SYMBOL_STR(class_destroy) },
 	{ 0x87ffdb4a, __VMLINUX_SYMBOL_STR(device_destroy) },
 	{ 0x7485e15e, __VMLINUX_SYMBOL_STR(unregister_chrdev_region) },
@@ -41,6 +42,8 @@ __attribute__((section("__versions"))) = {
 	{ 0xb0893db0, __VMLINUX_SYMBOL_STR(gpiod_direction_output_raw) },
 	{ 0xdc17d938, __VMLINUX_SYMBOL_STR(of_get_named_gpio_flags) },
 	{ 0x9c1533ea, __VMLINUX_SYMBOL_STR(of_find_node_opts_by_path) },
+	{ 0xa42f45ff, __VMLINUX_SYMBOL_STR(kmem_cache_alloc) },
+	{ 0xd9af261e, __VMLINUX_SYMBOL_STR(kmalloc_caches) },
 	{ 0xfaef0ed, __VMLINUX_SYMBOL_STR(__tasklet_schedule) },
 	{ 0xca54fee, __VMLINUX_SYMBOL_STR(_test_and_set_bit) },
 	{ 0xf4fa543b, __VMLINUX_SYMBOL_STR(arm_copy_to_user) },
